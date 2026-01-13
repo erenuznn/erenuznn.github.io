@@ -1,189 +1,312 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Irrigation Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        
-        /* Status Cards */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-        .card h3 { margin: 0 0 10px; font-size: 0.9em; color: #666; text-transform: uppercase; }
-        .value { font-size: 2em; font-weight: bold; color: #2c3e50; }
-        
-        /* Specific Status Styling */
-        .status-box { padding: 5px 10px; border-radius: 5px; color: white; font-weight: bold; display: inline-block; margin-top: 5px;}
-        .opt { background: #27ae60; } /* Green */
-        .low { background: #f39c12; } /* Orange */
-        .sev { background: #c0392b; } /* Red */
-        
-        /* Charts */
-        .chart-container { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; height: 300px; }
-        
-        /* Error Banner */
-        #error-banner { display: none; background: #e74c3c; color: white; padding: 15px; text-align: center; border-radius: 5px; margin-bottom: 20px; font-weight: bold;}
-    </style>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>ThingSpeak Channel 1 Dashboard</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<style>
+		:root {
+			--bg: #0c1117;
+			--panel: #111824;
+			--accent: #12c2a3;
+			--accent-2: #f18f01;
+			--text: #e8edf4;
+			--muted: #9fb3c8;
+			--card: #131c2a;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: 'Space Grotesk', sans-serif;
+			background: radial-gradient(circle at 20% 20%, rgba(18,194,163,0.08), transparent 35%),
+									radial-gradient(circle at 80% 30%, rgba(241,143,1,0.08), transparent 30%),
+									var(--bg);
+			color: var(--text);
+			min-height: 100vh;
+			padding: 24px;
+		}
+		header {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 18px;
+		}
+		h1 { margin: 0; font-size: 1.6rem; letter-spacing: 0.4px; }
+		.controls {
+			display: flex;
+			gap: 10px;
+			flex-wrap: wrap;
+		}
+		input, button, select {
+			border: 1px solid rgba(255,255,255,0.08);
+			background: var(--panel);
+			color: var(--text);
+			padding: 10px 12px;
+			border-radius: 10px;
+			font-size: 0.95rem;
+			outline: none;
+		}
+		input:focus, select:focus { border-color: var(--accent); }
+		button {
+			cursor: pointer;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			border: none;
+			color: #0b1017;
+			font-weight: 600;
+			transition: transform 120ms ease, box-shadow 120ms ease;
+			box-shadow: 0 6px 16px rgba(18,194,163,0.25);
+		}
+		button:hover { transform: translateY(-1px); }
+		button:active { transform: translateY(0); }
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+			gap: 14px;
+		}
+		.card {
+			background: var(--card);
+			border: 1px solid rgba(255,255,255,0.05);
+			border-radius: 14px;
+			padding: 14px 16px;
+			box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+		}
+		.card h3 { margin: 0 0 6px; font-size: 1rem; color: var(--muted); }
+		.value { font-size: 1.4rem; font-weight: 600; }
+		.muted { color: var(--muted); font-size: 0.9rem; }
+		.status { margin-top: 8px; }
+		.status span { padding: 6px 10px; border-radius: 999px; font-size: 0.85rem; }
+		.ok { background: rgba(18,194,163,0.16); color: var(--accent); }
+		.err { background: rgba(241,143,1,0.16); color: var(--accent-2); }
+		.chart-wrap { margin-top: 18px; background: var(--panel); border-radius: 14px; padding: 14px; }
+		.footer { margin-top: 18px; color: var(--muted); font-size: 0.85rem; }
+	</style>
 </head>
 <body>
+	<header>
+		<h1>Plant Dashboard – Live View</h1>
+		<div class="controls">
+			<select id="channelSelect" aria-label="Choose plant">
+				<option value="channel1" selected>Plant 1</option>
+				<option value="channel2">Plant 2</option>
+				<option value="channel3">Plant 3</option>
+				<option value="channel4">Plant 4</option>
+			</select>
+			<input id="channelId" type="text" placeholder="Channel ID" aria-label="Channel ID" style="display:none">
+			<input id="readKey" type="text" placeholder="Read API Key" aria-label="Read API Key" style="display:none">
+			<select id="resultCount" aria-label="Number of results">
+				<option value="10">Last 10</option>
+				<option value="20" selected>Last 20</option>
+				<option value="40">Last 40</option>
+			</select>
+			<button id="refreshBtn">Refresh Now</button>
+		</div>
+	</header>
 
-<div class="container">
-    <div id="error-banner">SYSTEM WARNING: <span id="err-text"></span></div>
+	<div class="grid" id="cards"></div>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-        <h1>🌱 Plant Monitor</h1>
-        <div style="text-align:right;">
-            <small>Last Update:</small><br>
-            <span id="timestamp" style="font-weight:bold;">--:--:--</span>
-        </div>
-    </div>
+	<div class="chart-wrap">
+		<canvas id="chart" height="140"></canvas>
+	</div>
 
-    <div class="grid">
-        <div class="card">
-            <h3>Stress Index (CWSI)</h3>
-            <div id="cwsi" class="value">--</div>
-        </div>
-        <div class="card">
-            <h3>VPD (kPa)</h3>
-            <div id="vpd" class="value">--</div>
-        </div>
-        <div class="card">
-            <h3>Leaf Temp</h3>
-            <div id="t_leaf" class="value">--°C</div>
-        </div>
-        <div class="card">
-            <h3>System State</h3>
-            <div id="state-badge" class="status-box opt">Loading...</div>
-            <div id="pump-status" style="margin-top:5px; font-size:0.8em; color:#555;"></div>
-        </div>
-    </div>
+	<div class="footer" id="status">Waiting for input…</div>
 
-    <div class="chart-container">
-        <canvas id="mainChart"></canvas>
-    </div>
-</div>
+	<script>
+		// Replace with your defaults if desired
+		const channels = {
+			channel1: { id: '3218426', readKey: 'OZMYFFI8039HAYSD', label: 'Plant 1' },
+			channel2: { id: '3228048', readKey: 'YJMT4N3SMOW5WKCS', label: 'Plant 2' },
+			channel3: { id: '3228049', readKey: 'WA8XTZSTE1LGTQAG', label: 'Plant 3' },
+			channel4: { id: '3228050', readKey: 'ADPTYIZIVTDKSVZE', label: 'Plant 4' },
+		};
+		const DEFAULT_CHANNEL_ID = channels.channel1.id;
+		const DEFAULT_READ_KEY = channels.channel1.readKey;
 
-<script>
-    // --- CONFIGURATION ---
-    const CHANNEL_ID = '3218426'; 
-    const READ_KEY   = 'OZMYFFI8039HAYSD';
+		const cardsEl = document.getElementById('cards');
+		const statusEl = document.getElementById('status');
+		const channelSelect = document.getElementById('channelSelect');
+		const channelInput = document.getElementById('channelId');
+		const keyInput = document.getElementById('readKey');
+		const resultSelect = document.getElementById('resultCount');
+		const fieldSelect = document.createElement('select');
+		fieldSelect.id = 'fieldSelect';
+		fieldSelect.ariaLabel = 'Field to plot';
+		const refreshBtn = document.getElementById('refreshBtn');
 
-    // Global Chart Object
-    let myChart;
+		// Insert field selector into controls
+		resultSelect.insertAdjacentElement('afterend', fieldSelect);
 
-    async function fetchData() {
-        const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_KEY}&results=30`;
-        
-        try {
-            const response = await fetch(url);
-            const data = await response.json();
-            updateDashboard(data.feeds);
-        } catch (error) {
-            console.error("Error fetching data:", error);
-        }
-    }
+		let chart;
+		let lastFeeds = [];
 
-    function updateDashboard(feeds) {
-        if (feeds.length === 0) return;
+		channelInput.value = DEFAULT_CHANNEL_ID;
+		keyInput.value = DEFAULT_READ_KEY;
 
-        // 1. GET LATEST READING
-        const latest = feeds[feeds.length - 1];
+		const fieldNames = {
+			field1: 'Leaf Temp',
+			field2: 'Ambient Temp',
+			field3: 'Relative Humidity',
+			field4: 'Leaf Cap',
+			field5: 'CWSI',
+			field6: 'VPD',
+			field7: 'Pump Status',
+			field8: 'Error'
+		};
 
-        // Update Text Values
-        document.getElementById('timestamp').innerText = new Date(latest.created_at).toLocaleTimeString();
-        document.getElementById('cwsi').innerText = parseFloat(latest.field1).toFixed(2);
-        document.getElementById('vpd').innerText  = parseFloat(latest.field2).toFixed(2);
-        document.getElementById('t_leaf').innerText = parseFloat(latest.field6).toFixed(1) + "°C";
+		const fieldUnits = {
+			field1: '°C',
+			field2: '°C',
+			field3: '%',
+			field4: 'pF',
+			field5: '',
+			field6: 'kPa',
+			field7: '',
+			field8: ''
+		};
 
-        // 2. DECODE STATE (Field 7)
-        // Value = Integer(Stress) + Decimal(Pump)
-        // e.g., 1.5 = Low Stress + Pump ON
-        const rawState = parseFloat(latest.field7);
-        const stressLevel = Math.floor(rawState); 
-        const pumpOn = (rawState - stressLevel) >= 0.5;
+		function setStatus(msg, ok = true) {
+			statusEl.textContent = msg;
+			statusEl.className = ok ? 'ok status' : 'err status';
+		}
 
-        const badge = document.getElementById('state-badge');
-        const pumpText = document.getElementById('pump-status');
+		function formatValue(fieldKey, val) {
+			if (val === null || val === undefined || val === '') return '—';
+			const num = parseFloat(val);
+			const unit = fieldUnits[fieldKey] || '';
+			if (Number.isFinite(num)) {
+				return unit ? `${num} ${unit}` : `${num}`;
+			}
+			return val;
+		}
 
-        // Set Stress Label
-        if(stressLevel === 0) { badge.innerText = "OPTIMAL"; badge.className = "status-box opt"; }
-        else if(stressLevel === 1) { badge.innerText = "LOW STRESS"; badge.className = "status-box low"; }
-        else { badge.innerText = "SEVERE STRESS"; badge.className = "status-box sev"; }
+		function buildFieldSelector() {
+			fieldSelect.innerHTML = '';
+			Object.entries(fieldNames).forEach(([key, label], idx) => {
+				const opt = document.createElement('option');
+				opt.value = key;
+				opt.textContent = `${label}`;
+				if (idx === 0) opt.selected = true;
+				fieldSelect.appendChild(opt);
+			});
+		}
 
-        // Set Pump Text
-        pumpText.innerText = pumpOn ? "💧 PUMP ACTIVE" : "💤 Pump Idle";
-        pumpText.style.color = pumpOn ? "#3498db" : "#95a5a6";
-        pumpText.style.fontWeight = pumpOn ? "bold" : "normal";
+		function buildCards(feeds) {
+			cardsEl.innerHTML = '';
+			if (!feeds.length) return;
 
-        // 3. DECODE ERROR MASK (Field 8)
-        const errMask = parseInt(latest.field8);
-        const errBanner = document.getElementById('error-banner');
-        if(errMask > 0) {
-            errBanner.style.display = 'block';
-            let msg = [];
-            if(errMask & 1) msg.push("MLX Sensor");
-            if(errMask & 2) msg.push("BME Sensor");
-            if(errMask & 4) msg.push("Cap Sensor");
-            if(errMask & 8) msg.push("Pump Start Fail");
-            if(errMask & 16) msg.push("PUMP STUCK ON");
-            document.getElementById('err-text').innerText = msg.join(", ");
-        } else {
-            errBanner.style.display = 'none';
-        }
+			// For each field, find the most recent non-null value
+			const latestPerField = {};
+			const keys = Object.keys(fieldNames);
+			for (let i = feeds.length - 1; i >= 0; i--) {
+				const f = feeds[i];
+				keys.forEach(k => {
+					if (!latestPerField[k] && f[k] !== null && f[k] !== undefined && f[k] !== '') {
+						latestPerField[k] = { value: f[k], ts: f.created_at };
+					}
+				});
+				// Break early if we already found all
+				if (keys.every(k => latestPerField[k])) break;
+			}
 
-        // 4. UPDATE CHARTS
-        updateChart(feeds);
-    }
+			keys.forEach(k => {
+				const entry = latestPerField[k];
+				const displayVal = formatValue(k, entry ? entry.value : null);
+				const ts = entry ? new Date(entry.ts).toLocaleString() : '—';
+				const card = document.createElement('div');
+				card.className = 'card';
+				card.innerHTML = `
+					<h3>${fieldNames[k]}</h3>
+					<div class="value">${displayVal}</div>
+					<div class="muted">Updated: ${ts}</div>
+				`;
+				cardsEl.appendChild(card);
+			});
+		}
 
-    function updateChart(feeds) {
-        const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-        const cwsiData = feeds.map(f => f.field1);
-        const vpdData = feeds.map(f => f.field2);
+		function updateChart(feeds) {
+			if (!feeds.length) return;
+			const selectedField = fieldSelect.value || 'field1';
+			const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString());
+			const data = feeds.map(f => parseFloat(f[selectedField])).map(v => (Number.isFinite(v) ? v : null));
+			const unit = fieldUnits[selectedField] || '';
+			const label = unit ? `${fieldNames[selectedField]} [${unit}]` : `${fieldNames[selectedField]}`;
+			if (chart) chart.destroy();
+			chart = new Chart(document.getElementById('chart'), {
+				type: 'line',
+				data: {
+					labels,
+					datasets: [{
+						label,
+						data,
+						borderColor: '#12c2a3',
+						backgroundColor: 'rgba(18,194,163,0.15)',
+						tension: 0.25,
+						fill: true,
+						pointRadius: 3,
+						spanGaps: true
+					}]
+				},
+				options: {
+					plugins: { legend: { labels: { color: '#e8edf4' } } },
+					scales: {
+						x: { ticks: { color: '#9fb3c8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+						y: { ticks: { color: '#9fb3c8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+					}
+				}
+			});
+		}
 
-        if(myChart) {
-            myChart.data.labels = labels;
-            myChart.data.datasets[0].data = cwsiData;
-            myChart.data.datasets[1].data = vpdData;
-            myChart.update();
-        } else {
-            const ctx = document.getElementById('mainChart').getContext('2d');
-            myChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'CWSI (Stress)',
-                        data: cwsiData,
-                        borderColor: '#e74c3c',
-                        yAxisID: 'y',
-                        tension: 0.4
-                    }, {
-                        label: 'VPD (kPa)',
-                        data: vpdData,
-                        borderColor: '#3498db',
-                        yAxisID: 'y1',
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { position: 'left', min: 0, max: 1.2, title: {display:true, text:'CWSI'} },
-                        y1: { position: 'right', grid: {drawOnChartArea: false}, title: {display:true, text:'VPD'} }
-                    }
-                }
-            });
-        }
-    }
+		async function fetchData() {
+			const channel = channelInput.value.trim();
+			const key = keyInput.value.trim();
+			const results = resultSelect.value;
+			if (!channel || !key) {
+				setStatus('Please enter Channel ID and Read API Key', false);
+				return;
+			}
+			try {
+				setStatus('Loading…');
+				const url = `https://api.thingspeak.com/channels/${channel}/feeds.json?api_key=${key}&results=${results}`;
+				const res = await fetch(url);
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				const data = await res.json();
+				lastFeeds = data.feeds || [];
+				const feeds = lastFeeds;
+				if (!feeds.length) {
+					setStatus('No data available', false);
+					return;
+				}
+				buildCards(feeds);
+				updateChart(feeds);
+				const newest = feeds[feeds.length - 1];
+				setStatus(`Updated ${new Date(newest.created_at).toLocaleTimeString()}`);
+			} catch (err) {
+				console.error(err);
+				setStatus('Failed to load data', false);
+			}
+		}
 
-    // Auto-refresh every 30 seconds
-    fetchData();
-    setInterval(fetchData, 30000);
+		channelSelect.addEventListener('change', () => {
+			const sel = channelSelect.value;
+			if (channels[sel]) {
+				channelInput.value = channels[sel].id;
+				keyInput.value = channels[sel].readKey;
+			}
+			fetchData();
+		});
 
-</script>
+		refreshBtn.addEventListener('click', fetchData);
+		fieldSelect.addEventListener('change', () => updateChart(lastFeeds));
+		// Auto-refresh every 60 seconds
+		setInterval(fetchData, 60000);
+
+		// init
+		buildFieldSelector();
+	</script>
 </body>
 </html>
