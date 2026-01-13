@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Irrigation Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        /* Status Cards */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+        .card h3 { margin: 0 0 10px; font-size: 0.9em; color: #666; text-transform: uppercase; }
+        .value { font-size: 2em; font-weight: bold; color: #2c3e50; }
+        
+        /* Specific Status Styling */
+        .status-box { padding: 5px 10px; border-radius: 5px; color: white; font-weight: bold; display: inline-block; margin-top: 5px;}
+        .opt { background: #27ae60; } /* Green */
+        .low { background: #f39c12; } /* Orange */
+        .sev { background: #c0392b; } /* Red */
+        
+        /* Charts */
+        .chart-container { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; height: 300px; }
+        
+        /* Error Banner */
+        #error-banner { display: none; background: #e74c3c; color: white; padding: 15px; text-align: center; border-radius: 5px; margin-bottom: 20px; font-weight: bold;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="error-banner">SYSTEM WARNING: <span id="err-text"></span></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <h1>🌱 Plant Monitor</h1>
+        <div style="text-align:right;">
+            <small>Last Update:</small><br>
+            <span id="timestamp" style="font-weight:bold;">--:--:--</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Stress Index (CWSI)</h3>
+            <div id="cwsi" class="value">--</div>
+        </div>
+        <div class="card">
+            <h3>VPD (kPa)</h3>
+            <div id="vpd" class="value">--</div>
+        </div>
+        <div class="card">
+            <h3>Leaf Temp</h3>
+            <div id="t_leaf" class="value">--°C</div>
+        </div>
+        <div class="card">
+            <h3>System State</h3>
+            <div id="state-badge" class="status-box opt">Loading...</div>
+            <div id="pump-status" style="margin-top:5px; font-size:0.8em; color:#555;"></div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="mainChart"></canvas>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    const CHANNEL_ID = '3218426'; 
+    const READ_KEY   = 'OZMYFFI8039HAYSD';
+
+    // Global Chart Object
+    let myChart;
+
+    async function fetchData() {
+        const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_KEY}&results=30`;
+        
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            updateDashboard(data.feeds);
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        }
+    }
+
+    function updateDashboard(feeds) {
+        if (feeds.length === 0) return;
+
+        // 1. GET LATEST READING
+        const latest = feeds[feeds.length - 1];
+
+        // Update Text Values
+        document.getElementById('timestamp').innerText = new Date(latest.created_at).toLocaleTimeString();
+        document.getElementById('cwsi').innerText = parseFloat(latest.field1).toFixed(2);
+        document.getElementById('vpd').innerText  = parseFloat(latest.field2).toFixed(2);
+        document.getElementById('t_leaf').innerText = parseFloat(latest.field6).toFixed(1) + "°C";
+
+        // 2. DECODE STATE (Field 7)
+        // Value = Integer(Stress) + Decimal(Pump)
+        // e.g., 1.5 = Low Stress + Pump ON
+        const rawState = parseFloat(latest.field7);
+        const stressLevel = Math.floor(rawState); 
+        const pumpOn = (rawState - stressLevel) >= 0.5;
+
+        const badge = document.getElementById('state-badge');
+        const pumpText = document.getElementById('pump-status');
+
+        // Set Stress Label
+        if(stressLevel === 0) { badge.innerText = "OPTIMAL"; badge.className = "status-box opt"; }
+        else if(stressLevel === 1) { badge.innerText = "LOW STRESS"; badge.className = "status-box low"; }
+        else { badge.innerText = "SEVERE STRESS"; badge.className = "status-box sev"; }
+
+        // Set Pump Text
+        pumpText.innerText = pumpOn ? "💧 PUMP ACTIVE" : "💤 Pump Idle";
+        pumpText.style.color = pumpOn ? "#3498db" : "#95a5a6";
+        pumpText.style.fontWeight = pumpOn ? "bold" : "normal";
+
+        // 3. DECODE ERROR MASK (Field 8)
+        const errMask = parseInt(latest.field8);
+        const errBanner = document.getElementById('error-banner');
+        if(errMask > 0) {
+            errBanner.style.display = 'block';
+            let msg = [];
+            if(errMask & 1) msg.push("MLX Sensor");
+            if(errMask & 2) msg.push("BME Sensor");
+            if(errMask & 4) msg.push("Cap Sensor");
+            if(errMask & 8) msg.push("Pump Start Fail");
+            if(errMask & 16) msg.push("PUMP STUCK ON");
+            document.getElementById('err-text').innerText = msg.join(", ");
+        } else {
+            errBanner.style.display = 'none';
+        }
+
+        // 4. UPDATE CHARTS
+        updateChart(feeds);
+    }
+
+    function updateChart(feeds) {
+        const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        const cwsiData = feeds.map(f => f.field1);
+        const vpdData = feeds.map(f => f.field2);
+
+        if(myChart) {
+            myChart.data.labels = labels;
+            myChart.data.datasets[0].data = cwsiData;
+            myChart.data.datasets[1].data = vpdData;
+            myChart.update();
+        } else {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'CWSI (Stress)',
+                        data: cwsiData,
+                        borderColor: '#e74c3c',
+                        yAxisID: 'y',
+                        tension: 0.4
+                    }, {
+                        label: 'VPD (kPa)',
+                        data: vpdData,
+                        borderColor: '#3498db',
+                        yAxisID: 'y1',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { position: 'left', min: 0, max: 1.2, title: {display:true, text:'CWSI'} },
+                        y1: { position: 'right', grid: {drawOnChartArea: false}, title: {display:true, text:'VPD'} }
+                    }
+                }
+            });
+        }
+    }
+
+    // Auto-refresh every 30 seconds
+    fetchData();
+    setInterval(fetchData, 30000);
+
+</script>
+</body>
+</html>
