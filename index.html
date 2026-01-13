@@ -85,6 +85,48 @@
 		.err { background: rgba(241,143,1,0.16); color: var(--accent-2); }
 		.chart-wrap { margin-top: 18px; background: var(--panel); border-radius: 14px; padding: 14px; }
 		.footer { margin-top: 18px; color: var(--muted); font-size: 0.85rem; }
+		.modal {
+			display: none;
+			position: fixed;
+			top: 0; left: 0; right: 0; bottom: 0;
+			background: rgba(0,0,0,0.6);
+			z-index: 1000;
+			justify-content: center;
+			align-items: center;
+		}
+		.modal.show { display: flex; }
+		.modal-content {
+			background: var(--panel);
+			border: 1px solid rgba(255,255,255,0.08);
+			border-radius: 14px;
+			padding: 24px;
+			max-width: 400px;
+			box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+		}
+		.modal-content h2 { margin: 0 0 16px; color: var(--accent); font-size: 1.3rem; }
+		.stat-row {
+			display: flex;
+			justify-content: space-between;
+			padding: 10px 0;
+			border-bottom: 1px solid rgba(255,255,255,0.05);
+			font-size: 0.95rem;
+		}
+		.stat-row:last-child { border-bottom: none; }
+		.stat-label { color: var(--muted); }
+		.stat-value { font-weight: 600; color: var(--text); }
+		.modal-close {
+			margin-top: 16px;
+			width: 100%;
+			padding: 10px 12px;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			border: none;
+			color: #0b1017;
+			border-radius: 10px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: transform 120ms ease;
+		}
+		.modal-close:hover { transform: translateY(-1px); }
 	</style>
 </head>
 <body>
@@ -105,8 +147,17 @@
 				<option value="40">Last 40</option>
 			</select>
 			<button id="refreshBtn">Refresh Now</button>
+			<button id="statsBtn">Statistics</button>
 		</div>
 	</header>
+
+	<div id="statsModal" class="modal">
+		<div class="modal-content">
+			<h2 id="statsTitle">Statistics</h2>
+			<div id="statsBody"></div>
+			<button class="modal-close" id="statsClose">Close</button>
+		</div>
+	</div>
 
 	<div class="grid" id="cards"></div>
 
@@ -137,6 +188,9 @@
 		fieldSelect.id = 'fieldSelect';
 		fieldSelect.ariaLabel = 'Field to plot';
 		const refreshBtn = document.getElementById('refreshBtn');
+		const statsBtn = document.getElementById('statsBtn');
+		const statsModal = document.getElementById('statsModal');
+		const statsClose = document.getElementById('statsClose');
 
 		// Insert field selector into controls
 		resultSelect.insertAdjacentElement('afterend', fieldSelect);
@@ -182,6 +236,67 @@
 				return unit ? `${num} ${unit}` : `${num}`;
 			}
 			return val;
+		}
+
+		function calculateStats(data) {
+			const vals = data.filter(v => Number.isFinite(v));
+			if (!vals.length) return null;
+			const n = vals.length;
+			const sum = vals.reduce((a, b) => a + b, 0);
+			const mean = sum / n;
+			const variance = vals.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+			const stdDev = Math.sqrt(variance);
+			const sorted = [...vals].sort((a, b) => a - b);
+			const median = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+			return {
+				count: n,
+				min: Math.min(...vals),
+				max: Math.max(...vals),
+				mean: mean,
+				median: median,
+				stdDev: stdDev
+			};
+		}
+
+		function showStats() {
+			const selectedField = fieldSelect.value || 'field1';
+			const data = lastFeeds.map(f => parseFloat(f[selectedField]));
+			const stats = calculateStats(data);
+			if (!stats) {
+				setStatus('No valid data for statistics', false);
+				return;
+			}
+			const unit = fieldUnits[selectedField] || '';
+			const unitStr = unit ? ` ${unit}` : '';
+			const statsBody = document.getElementById('statsBody');
+			statsBody.innerHTML = `
+				<div class="stat-row">
+					<span class="stat-label">Count</span>
+					<span class="stat-value">${stats.count}</span>
+				</div>
+				<div class="stat-row">
+					<span class="stat-label">Min</span>
+					<span class="stat-value">${stats.min.toFixed(2)}${unitStr}</span>
+				</div>
+				<div class="stat-row">
+					<span class="stat-label">Max</span>
+					<span class="stat-value">${stats.max.toFixed(2)}${unitStr}</span>
+				</div>
+				<div class="stat-row">
+					<span class="stat-label">Mean</span>
+					<span class="stat-value">${stats.mean.toFixed(2)}${unitStr}</span>
+				</div>
+				<div class="stat-row">
+					<span class="stat-label">Median</span>
+					<span class="stat-value">${stats.median.toFixed(2)}${unitStr}</span>
+				</div>
+				<div class="stat-row">
+					<span class="stat-label">Std Dev</span>
+					<span class="stat-value">${stats.stdDev.toFixed(2)}${unitStr}</span>
+				</div>
+			`;
+			document.getElementById('statsTitle').textContent = `Statistics: ${fieldNames[selectedField]}`;
+			statsModal.classList.add('show');
 		}
 
 		function buildFieldSelector() {
@@ -301,12 +416,18 @@
 		});
 
 		refreshBtn.addEventListener('click', fetchData);
+		statsBtn.addEventListener('click', showStats);
+		statsClose.addEventListener('click', () => statsModal.classList.remove('show'));
+		statsModal.addEventListener('click', (e) => {
+			if (e.target === statsModal) statsModal.classList.remove('show');
+		});
 		fieldSelect.addEventListener('change', () => updateChart(lastFeeds));
 		// Auto-refresh every 60 seconds
 		setInterval(fetchData, 60000);
 
 		// init
 		buildFieldSelector();
+		fetchData();
 	</script>
 </body>
 </html>
