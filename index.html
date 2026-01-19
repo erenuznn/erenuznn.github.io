@@ -67,7 +67,7 @@
 		}
 		#chartsGrid {
 			grid-template-columns: repeat(4, 1fr);
-			gap: 8px;
+			gap: 4px;
 		}
 		.card {
 			background: #ffffff;
@@ -80,11 +80,11 @@
 		.value { font-size: 1.2rem; font-weight: 600; color: var(--text); }
 		.muted { color: var(--muted); font-size: 0.85rem; }
 		#chartsGrid .card {
-			padding: 8px 10px;
+			padding: 4px 6px;
 		}
 		#chartsGrid .card h3 {
-			margin: 0 0 4px;
-			font-size: 0.8rem;
+			margin: 0 0 2px;
+			font-size: 0.72rem;
 		}
 		canvas {
 			max-width: 100%;
@@ -92,7 +92,7 @@
 		}
 		#chartsGrid canvas {
 			width: 100% !important;
-			height: 80px !important;
+			height: 180px !important;
 		}
 		.status { margin-top: 8px; }
 		.status span { padding: 0; border-radius: 0; font-size: 0.9rem; }
@@ -415,7 +415,7 @@
 				const wrapper = document.createElement('div');
 				wrapper.style.position = 'relative';
 				wrapper.style.width = '100%';
-				wrapper.style.height = '80px';
+			wrapper.style.height = '180px';
 				card.innerHTML = `<h3>${fieldNames[key]}${unit ? ` [${unit}]` : ''}</h3>`;
 				const canvas = document.createElement('canvas');
 				wrapper.appendChild(canvas);
