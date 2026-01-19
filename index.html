@@ -147,6 +147,7 @@
 				<option value="40">Last 40</option>
 			</select>
 			<button id="refreshBtn">Refresh Now</button>
+			<button id="toggleViewBtn" title="Toggle single/multi plot view">Show All</button>
 			<button id="statsBtn">Statistics</button>
 		</div>
 	</header>
@@ -161,9 +162,11 @@
 
 	<div class="grid" id="cards"></div>
 
-	<div class="chart-wrap">
+	<div class="chart-wrap" id="singleChartWrap">
 		<canvas id="chart" height="140"></canvas>
 	</div>
+
+	<div id="chartsGrid" class="grid" style="display:none"></div>
 
 	<div class="footer" id="status">Waiting for input…</div>
 
@@ -188,6 +191,7 @@
 		fieldSelect.id = 'fieldSelect';
 		fieldSelect.ariaLabel = 'Field to plot';
 		const refreshBtn = document.getElementById('refreshBtn');
+		const toggleViewBtn = document.getElementById('toggleViewBtn');
 		const statsBtn = document.getElementById('statsBtn');
 		const statsModal = document.getElementById('statsModal');
 		const statsClose = document.getElementById('statsClose');
@@ -196,6 +200,8 @@
 		resultSelect.insertAdjacentElement('afterend', fieldSelect);
 
 		let chart;
+		let isMulti = false;
+		let multiCharts = [];
 		let lastFeeds = [];
 
 		channelInput.value = DEFAULT_CHANNEL_ID;
@@ -376,6 +382,53 @@
 			});
 		}
 
+		function destroyMultiCharts() {
+			multiCharts.forEach(c => c && c.destroy && c.destroy());
+			multiCharts = [];
+		}
+
+		function updateMultiCharts(feeds) {
+			const grid = document.getElementById('chartsGrid');
+			grid.innerHTML = '';
+			destroyMultiCharts();
+			if (!feeds.length) return;
+			const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString());
+			Object.keys(fieldNames).forEach((key) => {
+				const unit = fieldUnits[key] || '';
+				const series = feeds.map(f => parseFloat(f[key])).map(v => (Number.isFinite(v) ? v : null));
+				const card = document.createElement('div');
+				card.className = 'card';
+				card.innerHTML = `<h3>${fieldNames[key]}${unit ? ` [${unit}]` : ''}</h3><canvas height="110"></canvas>`;
+				grid.appendChild(card);
+				const ctx = card.querySelector('canvas').getContext('2d');
+				const c = new Chart(ctx, {
+					type: 'line',
+					data: {
+						labels,
+						datasets: [{
+							data: series,
+							borderColor: '#12c2a3',
+							backgroundColor: 'rgba(18,194,163,0.12)',
+							tension: 0.25,
+							fill: true,
+							pointRadius: 0,
+							spanGaps: true
+						}]
+					},
+					options: {
+						plugins: { legend: { display: false } },
+						elements: { line: { borderWidth: 2 } },
+						maintainAspectRatio: false,
+						scales: {
+							x: { ticks: { color: '#9fb3c8', maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+							y: { ticks: { color: '#9fb3c8', maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.05)' } }
+						}
+					}
+				});
+				multiCharts.push(c);
+			});
+		}
+
 		async function fetchData() {
 			const channel = channelInput.value.trim();
 			const key = keyInput.value.trim();
@@ -397,7 +450,11 @@
 					return;
 				}
 				buildCards(feeds);
-				updateChart(feeds);
+				if (isMulti) {
+					updateMultiCharts(feeds);
+				} else {
+					updateChart(feeds);
+				}
 				const newest = feeds[feeds.length - 1];
 				setStatus(`Updated ${new Date(newest.created_at).toLocaleTimeString()}`);
 			} catch (err) {
@@ -421,7 +478,22 @@
 		statsModal.addEventListener('click', (e) => {
 			if (e.target === statsModal) statsModal.classList.remove('show');
 		});
-		fieldSelect.addEventListener('change', () => updateChart(lastFeeds));
+		fieldSelect.addEventListener('change', () => { if (!isMulti) updateChart(lastFeeds); });
+
+		toggleViewBtn.addEventListener('click', () => {
+			isMulti = !isMulti;
+			toggleViewBtn.textContent = isMulti ? 'Show Single' : 'Show All';
+			fieldSelect.disabled = isMulti;
+			document.getElementById('singleChartWrap').style.display = isMulti ? 'none' : '';
+			document.getElementById('chartsGrid').style.display = isMulti ? '' : 'none';
+			if (isMulti) {
+				if (chart) { chart.destroy(); chart = null; }
+				updateMultiCharts(lastFeeds);
+			} else {
+				destroyMultiCharts();
+				updateChart(lastFeeds);
+			}
+		});
 		// Auto-refresh every 60 seconds
 		setInterval(fetchData, 60000);
 
