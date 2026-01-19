@@ -86,6 +86,14 @@
 			margin: 0 0 4px;
 			font-size: 0.8rem;
 		}
+		canvas {
+			max-width: 100%;
+			height: auto !important;
+		}
+		#chartsGrid canvas {
+			width: 100% !important;
+			height: 80px !important;
+		}
 		.status { margin-top: 8px; }
 		.status span { padding: 0; border-radius: 0; font-size: 0.9rem; }
 		.ok { color: var(--text); }
@@ -404,9 +412,16 @@
 				const series = feeds.map(f => parseFloat(f[key])).map(v => (Number.isFinite(v) ? v : null));
 				const card = document.createElement('div');
 				card.className = 'card';
-				card.innerHTML = `<h3>${fieldNames[key]}${unit ? ` [${unit}]` : ''}</h3><canvas height="80"></canvas>`;
+				const wrapper = document.createElement('div');
+				wrapper.style.position = 'relative';
+				wrapper.style.width = '100%';
+				wrapper.style.height = '80px';
+				card.innerHTML = `<h3>${fieldNames[key]}${unit ? ` [${unit}]` : ''}</h3>`;
+				const canvas = document.createElement('canvas');
+				wrapper.appendChild(canvas);
+				card.appendChild(wrapper);
 				grid.appendChild(card);
-				const ctx = card.querySelector('canvas').getContext('2d');
+				const ctx = canvas.getContext('2d');
 				const c = new Chart(ctx, {
 					type: 'line',
 					data: {
